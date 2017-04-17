@@ -33,6 +33,65 @@ using namespace optframe;
 //
 //}
 
+struct solDireitoDoFuturo
+{
+	vector<vector<int> > profileWeights;
+	vector<vector<pair<int, int> > > votes;
+	vector<int> relevantFacts;
+	double stdProfile;
+
+	solDireitoDoFuturo(vector<vector<int> > _profileWeights, vector<vector<pair<int, int> > > _votes, vector<int> _relevantFacts, double _stdProfile) :
+			profileWeights(_profileWeights), votes(_votes), relevantFacts(_relevantFacts), stdProfile(_stdProfile)
+	{
+
+	}
+//
+	friend ostream & operator<<(ostream & os, const solDireitoDoFuturo& sol)
+	{
+
+		os << "=======================================" << endl;
+		os << "==========PRINTING SOL ===============" << endl;
+		os << "=======================================" << endl;
+		os << "Profile weights:" << endl;
+		os << sol.profileWeights << endl;
+		os << "stdProfile:" << endl;
+		os << sol.stdProfile << endl;
+		os << "relevantFacts:" << endl;
+		os << sol.relevantFacts << endl;
+		os << "=======================================" << endl;
+
+		return os;
+	}
+
+};
+
+bool addSolution(vector<solDireitoDoFuturo>& nonDom, solDireitoDoFuturo candidateSol)
+{
+	bool added = false;
+
+
+	for (int ind = 0; ind < nonDom.size(); ind++)
+	{
+		if (nonDom[ind].relevantFacts == candidateSol.relevantFacts)
+		{
+			if (nonDom[ind].stdProfile <= candidateSol.stdProfile)
+			{
+				return false;
+			}
+			else
+			{
+				nonDom.erase(nonDom.begin() + ind);
+				ind--;
+			}
+		}
+
+	}
+	added = true;
+	nonDom.push_back(candidateSol);
+
+	return added;
+}
+
 static bool comparacao(pair<double, int> a, pair<double, int> b)
 {
 	return (a.first < b.first);
@@ -57,7 +116,6 @@ vector<int> returnMostRelevantFact(vector<double> factsFinalWeights)
 		else
 			break;
 
-	cout << weightsPerIndex << endl;
 	return relevantFacts;
 }
 
@@ -134,7 +192,7 @@ double calculateProfilesDesv(vector<vector<int> > profileWeights)
 				desv += pow(profileWeights[p][w] - mean, 2);
 			else
 				desv += 0;
-desv /= nCarac;
+		desv /= nCarac;
 
 		desv = sqrt(desv);
 		totalDesv += desv;
@@ -187,12 +245,15 @@ int main(int argc, char **argv)
 
 	int nCitizens = 15;
 
-	int nChar = 5;
+	int nChar = 3;
 	vector<vector<int> > citizensProfile;
 
 //	O tamanho deve vector deve ser exatamente nChar
+//	vector<int> characteristicFactors =
+//	{ 3, 2, 2, 5, 10 };
+
 	vector<int> characteristicFactors =
-	{ 3, 2, 2 , 5 , 10 };
+	{ 3, 2, 2 };
 
 	cout << "\n There are " << nCitizens << " citizens. Their profile characteristics goes as follow:" << endl;
 
@@ -259,7 +320,8 @@ int main(int argc, char **argv)
 //cout << "facts final weights:" << endl;
 //cout<<factFinalsWeight<<endl;
 
-	for (int i = 0; i < 100; i++)
+	vector<solDireitoDoFuturo> nonDominatedSolutions;
+	for (int i = 0; i < 10000; i++)
 	{
 //		vector<vector<int> > profileWeights = generateWeights(rg, characteristicFactors);
 //		vector<vector<double> > profilePonderatedWeights = ponderateWeights(profileWeights);
@@ -267,32 +329,42 @@ int main(int argc, char **argv)
 
 		vector<vector<int> > profileWeights = generateWeights(rg, characteristicFactors);
 
-		cout << "Profile weights:" << endl;
-		cout << profileWeights << endl;
 
 		double profilesStdDesv = calculateProfilesDesv(profileWeights);
-		cout << "profilesStdDesv:" << endl;
-		cout << profilesStdDesv << endl;
+
 
 		vector<vector<double> > profilePonderatedWeights = ponderateWeights(profileWeights);
-		cout << "Profile ponderated weights:" << endl;
-		cout << profilePonderatedWeights << endl;
+
 
 		vector<double> citizensFinalWeights = computeCitizensWeights(profilePonderatedWeights, citizensProfile);
-		cout << "Profile citizens final weights:" << endl;
-		cout << citizensFinalWeights << endl;
+
 
 		vector<double> factFinalsWeight = computeFactWeights(citizensFinalWeights, votes);
-		cout << "facts final weights:" << endl;
-		cout << factFinalsWeight << endl;
+
 
 		vector<int> relevantFacts = returnMostRelevantFact(factFinalsWeight);
 
-		cout << "relevantFacts:" << endl;
-		cout << relevantFacts << endl;
-		getchar();
+//		cout << "Profile weights:" << endl;
+//		cout << profileWeights << endl;
+//		cout << "Profile ponderated weights:" << endl;
+//		cout << profilePonderatedWeights << endl;
+//		cout << "profilesStdDesv:" << endl;
+//		cout << profilesStdDesv << endl;
+//		cout << "Profile citizens final weights:" << endl;
+//		cout << citizensFinalWeights << endl;
+//		cout << "facts final weights:" << endl;
+//		cout << factFinalsWeight << endl;
+//		cout << "relevantFacts:" << endl;
+//		cout << relevantFacts << endl;
+
+		solDireitoDoFuturo sol(profileWeights, votes, relevantFacts, profilesStdDesv);
+
+		addSolution(nonDominatedSolutions, sol);
+//		getchar();
 
 	}
+	cout<<"final vector contains "<<nonDominatedSolutions.size()<<" solutions..."<<endl;
+	cout<<nonDominatedSolutions<<endl;
 
 	cout << "\nFinished com sucesso!!" << endl;
 	return 0;
