@@ -8,6 +8,8 @@
 #include <iostream>
 #include <iomanip>
 #include <numeric>
+#include <random>
+#include <unistd.h>
 #include "../OptFrame/Util/RandGenMersenneTwister.hpp"
 #include "../OptFrame/Util/printable.h"
 #include "../OptFrame/RandGen.hpp"
@@ -69,10 +71,15 @@ bool addSolution(vector<solDireitoDoFuturo>& nonDom, solDireitoDoFuturo candidat
 {
 	bool added = false;
 
-
 	for (int ind = 0; ind < nonDom.size(); ind++)
 	{
-		if (nonDom[ind].relevantFacts == candidateSol.relevantFacts)
+		vector<int> a = nonDom[ind].relevantFacts;
+		vector<int> b = candidateSol.relevantFacts;
+		sort(a.begin(), a.end());
+		sort(b.begin(), b.end());
+
+//		if (nonDom[ind].relevantFacts == candidateSol.relevantFacts)
+		if (a == b)
 		{
 			if (nonDom[ind].stdProfile <= candidateSol.stdProfile)
 			{
@@ -136,6 +143,112 @@ vector<double> computeFactWeights(vector<double> citizensFinalWeights, vector<ve
 	}
 
 	return factsFinalWeights;
+}
+
+static bool comparacaoMaior(int a, int b)
+{
+	return (a > b);
+}
+
+vector<int> returnMostRelevantFactWithDeletes(vector<double> citizensFinalWeights, vector<vector<pair<int, int> > > votes, vector<int> factsProposers)
+{
+	vector<int> relevantFacts;
+
+	bool nextIter = true;
+	while (nextIter)
+	{
+		vector<double> factsFinalsWeight = computeFactWeights(citizensFinalWeights, votes);
+
+		int nFacts = factsFinalsWeight.size();
+		vector<pair<double, int> > weightsPerIndex;
+
+		for (int f = 0; f < nFacts; f++)
+		{
+			weightsPerIndex.push_back(make_pair(factsFinalsWeight[f], f));
+		}
+
+		sort(weightsPerIndex.begin(), weightsPerIndex.end(), comparacao);
+
+		bool deleted = false;
+		relevantFacts.clear();
+		for (int f = 0; f < nFacts; f++)
+		{
+			if (weightsPerIndex[f].first < 0)
+				relevantFacts.push_back(weightsPerIndex[f].second);
+			else
+			{
+
+				int proposed = factsProposers[f];
+				//				cout << proposed << endl;
+				factsProposers[f] = -1;
+
+				if (proposed != -1)
+				{
+					deleted = true;
+					//===========================
+					//exclude who proposed
+					citizensFinalWeights.erase(citizensFinalWeights.begin() + proposed);
+					//exclude citizens votes
+					for (int fv = 0; fv < votes.size(); fv++)
+						votes[fv].erase(votes[fv].begin() + proposed);
+
+					for (int fp = 0; fp < factsProposers.size(); fp++)
+					{
+						if (factsProposers[fp] == proposed)
+							factsProposers[fp] = -1;
+
+						if (factsProposers[fp] > proposed)
+							factsProposers[fp]--;
+					}
+//					cout << factsProposers << endl;
+//					cout << citizensFinalWeights << endl;
+//					getchar();
+
+				}
+
+				//===========================
+				//delete who proposed
+//				int proposed = factsProposers[f];
+////				cout << proposed << endl;
+//				vector<int> otherFacts;
+//				for (int fp = 0; fp < factsProposers.size(); fp++)
+//					if (factsProposers[fp] == proposed)
+//						otherFacts.push_back(fp);
+//				for (int fp = 0; fp < factsProposers.size(); fp++)
+//					if (factsProposers[fp] > proposed)
+//						factsProposers[fp]--;
+//
+//				sort(otherFacts.begin(), otherFacts.end(), comparacaoMaior);
+////				cout << otherFacts << endl;
+//				//deleting citizen
+//				citizensFinalWeights.erase(citizensFinalWeights.begin() + proposed);
+//
+//				//deleting citizen votes
+//				for (int fv = 0; fv < votes.size(); fv++)
+//					votes[fv].erase(votes[fv].begin() + proposed);
+//
+//				//deleting factsProposers
+//				for (int of = 0; of < otherFacts.size(); of++)
+//				{
+//					factsProposers.erase(factsProposers.begin() + otherFacts[of]);
+//					votes.erase(votes.begin() + otherFacts[of]);
+//				}
+//
+//				cout << factsProposers << endl;
+//				cout << votes.size() << "\t" << factsProposers.size() << endl;
+//				cout << weightsPerIndex << endl;
+//				cout << citizensFinalWeights << endl;
+//				getchar();
+//				deleted = true;
+//				break;
+			}
+		}
+
+		if (deleted == false)
+			nextIter = false;
+	}
+
+	return relevantFacts;
 }
 
 vector<double> computeCitizensWeights(vector<vector<double> > profilePonderatedWeights, vector<vector<int> > citizensProfile)
@@ -231,33 +344,108 @@ vector<vector<double> > ponderateWeights(vector<vector<int> > profileWeights)
 
 }
 
+unsigned long mix(unsigned long a, unsigned long b, unsigned long c)
+{
+	a = a - b;
+	a = a - c;
+	a = a ^ (c >> 13);
+	b = b - c;
+	b = b - a;
+	b = b ^ (a << 8);
+	c = c - a;
+	c = c - b;
+	c = c ^ (b >> 13);
+	a = a - b;
+	a = a - c;
+	a = a ^ (c >> 12);
+	b = b - c;
+	b = b - a;
+	b = b ^ (a << 16);
+	c = c - a;
+	c = c - b;
+	c = c ^ (b >> 5);
+	a = a - b;
+	a = a - c;
+	a = a ^ (c >> 3);
+	b = b - c;
+	b = b - a;
+	b = b ^ (a << 10);
+	c = c - a;
+	c = c - b;
+	c = c ^ (b >> 15);
+	return c;
+}
+
+vector<int> generateFactsPerCitizens(RandGenMersenneTwister& rg, int nCitizens)
+{
+	vector<int> factProposer;
+
+	for (int c = 0; c < nCitizens; c++)
+	{
+		int propose = rg.rand(10);
+		if (propose < 5)
+		{
+//			int nFacts = rg.rand(3) + 1;
+			int nFacts = 1;
+			for (int f = 0; f < nFacts; f++)
+			{
+				factProposer.push_back(c);
+			}
+		}
+	}
+
+	return factProposer;
+}
+
 int main(int argc, char **argv)
 {
 	cout << "A multicriteria view about judgements..." << endl;
 
 	RandGenMersenneTwister rg;
 	//long  1412730737
-	long seed = time(NULL); //CalibrationMode
-	seed = 0;
+//	long seed = time(NULL); //CalibrationMode
+//	struct timeval time;
+//	     gettimeofday(&time,NULL);
+//	     long seed = (time.tv_sec * 1000) + (time.tv_usec / 1000);
+	unsigned long seed = rg.generateRandomSeed();
+//	     unsigned long seed = mix(clock(), time(NULL), getpid());
+//	long seed = (unsigned) time(NULL) * getpid();
+//	seed = 0;
 	cout << "Seed = " << seed << endl;
 	srand(seed);
 	rg.setSeed(seed);
 
-	int nCitizens = 15;
+	int nCitizens = rg.rand(100) + 10;
+	int nCarac = rg.rand(30) + 1;
+	int nRandomWeights = (rg.rand(10) + 1) * 1000;
+	int nFacts = rg.rand(100) + 1;
 
-	int nChar = 3;
+//
+//	nCitizens = 200;
+//	nCarac = 3;
+////	nFacts = 100;
+//	nRandomWeights = 1000;
+//	vector<int> factsProposers = generateFactsPerCitizens(rg, nCitizens);
+//	int nFacts = factsProposers.size();
+//	cout << factsProposers << endl;
+//	cout<<"number of random weights:" <<nRandomWeights<<endl;
+
 	vector<vector<int> > citizensProfile;
 
 //	O tamanho deve vector deve ser exatamente nChar
 //	vector<int> characteristicFactors =
 //	{ 3, 2, 2, 5, 10 };
 
-	vector<int> characteristicFactors =
-	{ 3, 2, 2 };
+	vector<int> characteristicFactors;
+	for (int carac = 0; carac < nCarac; carac++)
+		characteristicFactors.push_back(rg.rand(2) + 2);
 
-	cout << "\n There are " << nCitizens << " citizens. Their profile characteristics goes as follow:" << endl;
+//	vector<int> characteristicFactors =
+//	{ 3, 2, 2 };
 
-	for (int carac = 0; carac < nChar; carac++)
+	cout << "\n There are " << nCitizens << " citizens. Their profile ( with " << nCarac << " characteristics goes as follow:" << endl;
+
+	for (int carac = 0; carac < nCarac; carac++)
 	{
 		vector<int> citizensChar;
 		for (int c = 0; c < nCitizens; c++)
@@ -271,18 +459,15 @@ int main(int argc, char **argv)
 	cout << citizensProfile << endl;
 
 //	======================================================
-
-	int nFacts = 7;
 	vector<vector<pair<int, int> > > votes;
 
 	cout << "\nTime for random voting. \nPrinting votes per fact:" << endl;
 
-	int nCitizensThatVoted = 15;
 	for (int f = 0; f < nFacts; f++)
 	{
 		cout << "Fato " << f + 1 << ": " << endl;
 		vector<pair<int, int> > citizensVotesForFactAndReplic;
-		for (int aC = 0; aC < nCitizensThatVoted; aC++)
+		for (int aC = 0; aC < nCitizens; aC++)
 		{
 
 			int voteFact = rg.rand(11);
@@ -321,7 +506,7 @@ int main(int argc, char **argv)
 //cout<<factFinalsWeight<<endl;
 
 	vector<solDireitoDoFuturo> nonDominatedSolutions;
-	for (int i = 0; i < 10000; i++)
+	for (int i = 0; i < nRandomWeights; i++)
 	{
 //		vector<vector<int> > profileWeights = generateWeights(rg, characteristicFactors);
 //		vector<vector<double> > profilePonderatedWeights = ponderateWeights(profileWeights);
@@ -329,20 +514,17 @@ int main(int argc, char **argv)
 
 		vector<vector<int> > profileWeights = generateWeights(rg, characteristicFactors);
 
-
 		double profilesStdDesv = calculateProfilesDesv(profileWeights);
-
 
 		vector<vector<double> > profilePonderatedWeights = ponderateWeights(profileWeights);
 
-
 		vector<double> citizensFinalWeights = computeCitizensWeights(profilePonderatedWeights, citizensProfile);
-
 
 		vector<double> factFinalsWeight = computeFactWeights(citizensFinalWeights, votes);
 
-
 		vector<int> relevantFacts = returnMostRelevantFact(factFinalsWeight);
+
+//		vector<int> relevantFacts = returnMostRelevantFactWithDeletes(citizensFinalWeights, votes, factsProposers);
 
 //		cout << "Profile weights:" << endl;
 //		cout << profileWeights << endl;
@@ -356,15 +538,21 @@ int main(int argc, char **argv)
 //		cout << factFinalsWeight << endl;
 //		cout << "relevantFacts:" << endl;
 //		cout << relevantFacts << endl;
+//		//		getchar();
 
 		solDireitoDoFuturo sol(profileWeights, votes, relevantFacts, profilesStdDesv);
 
 		addSolution(nonDominatedSolutions, sol);
-//		getchar();
 
 	}
-	cout<<"final vector contains "<<nonDominatedSolutions.size()<<" solutions..."<<endl;
-	cout<<nonDominatedSolutions<<endl;
+	cout << "final vector contains " << nonDominatedSolutions.size() << " solutions..." << endl;
+//	cout<<nonDominatedSolutions<<endl;
+
+// =================== PRINTING RESULTS ON FILE ========================
+	FILE* fResults = fopen("./calibrationWithSameElements", "a");
+	fprintf(fResults, "%d\t%d\t%d\t%d\t%d\t%ld\n", int(nonDominatedSolutions.size()), nCitizens, nCarac, nFacts, nRandomWeights, seed);
+	fclose(fResults);
+	// =======================================================
 
 	cout << "\nFinished com sucesso!!" << endl;
 	return 0;
